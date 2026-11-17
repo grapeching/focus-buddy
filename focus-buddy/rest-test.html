@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>专注伙伴 · 休息测试版（独立）</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e07a3f'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='white'%3E%E2%9C%95%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  /* ===== 休息测试版专属：和正式版一眼区分 ===== */
+  html.rest-test, body.rest-test { height: 100%; overflow: hidden; }
+  body.rest-test { display: flex; flex-direction: column; }
+
+  .test-banner {
+    flex: 0 0 auto;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    background: linear-gradient(90deg, #d9662e, #f0a868);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(160, 70, 20, .35);
+    z-index: 70;
+  }
+  .test-banner .tag {
+    font-weight: 800;
+    letter-spacing: .5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .22);
+    border: 1px solid rgba(255, 255, 255, .55);
+    white-space: nowrap;
+  }
+  .test-banner .sub { font-size: 12px; opacity: .95; }
+
+  .test-body { flex: 1 1 auto; display: flex; min-height: 0; }
+  .rest-test-app { flex: 1 1 auto; min-width: 0; height: 100%; }
+
+  .rest-panel {
+    flex: 0 0 300px;
+    height: 100%;
+    overflow-y: auto;
+    padding: 16px 16px 22px;
+    background: #fffdfa;
+    border-left: 1px solid #e4d9c8;
+    box-shadow: -4px 0 18px rgba(60, 40, 20, .08);
+    box-sizing: border-box;
+  }
+  .rest-panel h2 { margin: 0 0 4px; font-size: 17px; color: #4a3323; }
+  .rest-panel .pdesc { margin: 0 0 14px; font-size: 12px; color: #8a7560; line-height: 1.5; }
+
+  .rest-clock {
+    text-align: center;
+    padding: 14px 0 10px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fff6e9, #fbe9d2);
+    border: 1px solid #f0d6b4;
+  }
+  .rest-clock b {
+    display: block;
+    font-size: 46px;
+    line-height: 1;
+    letter-spacing: 2px;
+    color: #b55a24;
+    font-variant-numeric: tabular-nums;
+  }
+  .rest-clock span { font-size: 12px; color: #9a7b5c; }
+  .rest-state {
+    margin-top: 8px;
+    text-align: center;
+    font-size: 12px;
+    color: #6d5844;
+    min-height: 18px;
+  }
+
+  .rest-panel h3 {
+    margin: 18px 0 8px;
+    font-size: 12px;
+    color: #8a7560;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .rest-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rest-presets button, .rest-actions button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 9px;
+    border: 1px solid #e0cdb6;
+    background: #fff;
+    color: #6b4a32;
+    padding: 8px 6px;
+    transition: .16s;
+  }
+  .rest-presets button:hover, .rest-actions button:hover { border-color: #d98a4f; color: #b55a24; }
+  .rest-presets button.on { background: #f3b276; border-color: #d98a4f; color: #fff; font-weight: 700; }
+  .rest-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .rest-actions button.primary { background: #d9662e; border-color: #d9662e; color: #fff; font-weight: 700; }
+  .rest-actions button.primary:hover { background: #c2561f; color: #fff; }
+
+  .rest-voice { display: flex; gap: 8px; }
+  .rest-voice select {
+    flex: 1; min-width: 0;
+    font: inherit; font-size: 12px;
+    padding: 7px 6px;
+    border-radius: 9px;
+    border: 1px solid #e0cdb6;
+    background: #fff;
+    color: #6b4a32;
+  }
+  .rest-voice button {
+    font: inherit; font-size: 12px; cursor: pointer;
+    border-radius: 9px; border: 1px solid #e0cdb6;
+    background: #fff; color: #6b4a32; padding: 7px 10px;
+  }
+
+  .rest-tip {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fbf4e9;
+    border: 1px dashed #e6cba6;
+    font-size: 11.5px;
+    color: #8a6f55;
+    line-height: 1.6;
+  }
+  .rest-links { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+  .rest-links a { color: #b55a24; text-decoration: none; border-bottom: 1px dotted #d9a273; }
+  .rest-links a:hover { color: #8d4318; }
+
+  @media (max-width: 980px) {
+    .test-body { flex-direction: column; }
+    .rest-panel { flex: 0 0 auto; height: auto; max-height: 42%; border-left: none; border-top: 1px solid #e4d9c8; }
+  }
+</style>
+</head>
+<body class="rest-test">
+
+  <div class="test-banner">
+    <span class="tag">🛋 休息测试版</span>
+    <span class="sub">独立 HTML · 与正式版 index.html 分开 · 专门验收休息态：自由走动 / 睡觉 / 吃饭 / 翻书</span>
+  </div>
+
+  <div class="test-body">
+
+    <div class="app rest-test-app">
+      <main class="main">
+
+        <!-- 小屋整段与正式版一致，额外加 show-hud / show-test：显示倒计时与休息切换按钮 -->
+        <section class="view pixel-view on show-hud show-test" data-view="home" id="pixelView" data-day="day" data-mode="STUDY">
+          <div class="px-frame" id="pxFrame">
+
+            <img class="px-bg" id="pxDay" src="assets/pixel/scenes/room_clean.png" alt="白天的小屋" decoding="async" />
+            <img class="px-bg" id="pxNight" src="assets/pixel/scenes/room_clean.png" alt="夜晚的小屋" decoding="async" />
+
+            <div class="px-furn">
+              <img class="px-furn-item" data-spot="bed" src="assets/pixel/furniture/furniture_bed.png" alt="床" decoding="async" />
+              <img class="px-furn-item" data-spot="bookshelf" src="assets/pixel/furniture/furniture_bookshelf.png" alt="书柜" decoding="async" />
+              <img class="px-furn-item" data-spot="table" src="assets/pixel/furniture/furniture_table_food.png" alt="餐桌" decoding="async" />
+
+              <div class="px-scroll" id="pxScroll" title="测试版里卷轴仅作展示" role="button" tabindex="0">
+                <svg viewBox="0 0 180 200" aria-hidden="true">
+                  <path d="M42 4 L90 20 M138 4 L90 20" stroke="#6b4020" stroke-width="4" fill="none" />
+                  <rect x="85" y="16" width="10" height="9" fill="#4a2c14" />
+                  <rect x="8" y="24" width="164" height="11" fill="#8b5a2b" stroke="#4a2c14" stroke-width="3" />
+                  <rect x="0" y="20" width="12" height="19" fill="#a9713b" stroke="#4a2c14" stroke-width="3" />
+                  <rect x="168" y="20" width="12" height="19" fill="#a9713b" stroke="#4a2c14" stroke-width="3" />
+                  <rect x="20" y="34" width="140" height="142" fill="#f7e8c8" stroke="#8b5a2b" stroke-width="3" />
+                  <rect x="20" y="34" width="140" height="5" fill="#e3cba4" />
+                  <rect x="20" y="171" width="140" height="5" fill="#e3cba4" />
+                  <text class="sc-title" x="90" y="54" text-anchor="middle">休息测试</text>
+                  <path d="M32 62 H148" stroke="#c9a87a" stroke-width="2" />
+                  <text id="pxScrollRows" class="sc-rows" x="30" y="80"></text>
+                  <text id="pxScrollMeta" class="sc-meta" x="90" y="164" text-anchor="middle"></text>
+                  <rect x="8" y="176" width="164" height="11" fill="#8b5a2b" stroke="#4a2c14" stroke-width="3" />
+                  <rect x="0" y="172" width="12" height="19" fill="#a9713b" stroke="#4a2c14" stroke-width="3" />
+                  <rect x="168" y="172" width="12" height="19" fill="#a9713b" stroke="#4a2c14" stroke-width="3" />
+                </svg>
+              </div>
+
+              <div class="px-zones" aria-hidden="true">
+                <div class="px-zone" data-zone="bed"></div>
+                <div class="px-zone" data-zone="bookshelf"></div>
+                <div class="px-zone" data-zone="table"></div>
+              </div>
+            </div>
+
+            <img class="px-owl" id="pxOwl" src="assets/pixel/characters/owl_reading.png" alt="陪学的猫头鹰" decoding="async" />
+
+            <div class="px-muyu" id="pxMuyu" title="点一下手动敲木鱼" role="button" tabindex="0" aria-label="书桌上的木鱼">
+              <svg viewBox="0 0 64 58" aria-hidden="true">
+                <g class="my-mallet">
+                  <rect x="38" y="16" width="5" height="22" rx="1" fill="#7a4a20" stroke="#3d2410" stroke-width="1.5" />
+                  <rect x="34" y="10" width="13" height="10" rx="3" fill="#d59a4e" stroke="#3d2410" stroke-width="1.5" />
+                  <rect x="36" y="12" width="5" height="3" fill="#f0c17a" />
+                </g>
+                <path d="M6 34 Q6 49 26 50 Q46 49 47 34 Q47 26 26 26 Q6 26 6 34 Z" fill="#8f5223" stroke="#3d2410" stroke-width="2.5" />
+                <path d="M8 33 Q8 45 26 46 Q44 45 45 33 Q45 28 26 28 Q8 28 8 33 Z" fill="#b97438" />
+                <path d="M12 35 Q26 42 41 34" fill="none" stroke="#5a3016" stroke-width="3.5" stroke-linecap="round" />
+                <rect x="12" y="31" width="10" height="3" rx="1.5" fill="#e6b072" opacity=".85" />
+                <circle cx="26" cy="33" r="2.2" fill="#6b3a19" />
+                <ellipse cx="26" cy="51" rx="18" ry="2.4" fill="#3d2410" opacity=".26" />
+              </svg>
+              <span class="px-muyu-count" id="pxMuyuCount"></span>
+            </div>
+
+            <div class="px-ui">
+              <div class="px-top">
+                <div class="px-top-left">
+                  <div class="px-badge"><i></i><span id="pxBadge">一起学习</span><em id="pxTier"></em></div>
+                  <div class="px-phase" id="phaseChip"><i></i><span>未开始</span></div>
+                </div>
+                <div class="px-top-right">
+                  <div class="px-clock" title="本轮剩余时间">
+                    <svg viewBox="0 0 120 120" aria-hidden="true">
+                      <circle class="px-clock-track" cx="60" cy="60" r="52" />
+                      <circle class="px-clock-arc" id="clockArc" cx="60" cy="60" r="52" />
+                    </svg>
+                    <div class="px-clock-txt"><b id="clockText">25:00</b><span id="clockSub">专注</span></div>
+                  </div>
+                  <div class="px-dayctl">
+                    <button id="pxDayBtn" class="px-btn" title="切换白天 / 夜晚；右键恢复按时间自动切换">🌙 切到夜晚</button>
+                    <button id="pxAutoBtn" class="px-btn ghost on" title="按系统时间自动切换昼夜">自动</button>
+                    <button id="pxRestBtn" class="px-btn px-test-btn" title="测试用：进入休息态，看猫头鹰自由走动">🛋 进入休息</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="px-line" id="pxLine"></div>
+
+              <div class="px-foot">
+                <div class="px-tip" id="stageTip">休息测试版：猫头鹰正在自由活动</div>
+                <div class="px-footrow">
+                  <div class="foot-left">
+                    <b id="footTask">休息中</b>
+                    <span id="footSub">拖它去床 / 书柜 / 餐桌试试</span>
+                  </div>
+                  <div class="foot-right">
+                    <span class="foot-chip"><i class="ic">🔔</i><b id="footKnock">0</b> 次提醒</span>
+                    <span class="foot-chip"><i class="ic">⏱</i><b id="footFocus">0</b> 分专注</span>
+                  </div>
+                </div>
+                <div class="px-hint">随时可以拖我 · 放到床 / 书柜 / 餐桌会换动作 · 点我一下会说话</div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- ================= 休息控制面板（测试版专属） ================= -->
+    <aside class="rest-panel">
+      <h2>休息时间</h2>
+      <p class="pdesc">打开即进休息态。倒计时结束自动切回学习态；也可以随时手动切换。</p>
+
+      <div class="rest-clock">
+        <b id="restClock">05:00</b>
+        <span>剩余休息时间</span>
+      </div>
+      <div class="rest-state" id="restState">休息中 · 猫头鹰自由走动</div>
+
+      <h3>休息时长</h3>
+      <div class="rest-presets" id="restPresets">
+        <button type="button" data-sec="30">30 秒</button>
+        <button type="button" data-sec="60">1 分钟</button>
+        <button type="button" data-sec="180">3 分钟</button>
+        <button type="button" class="on" data-sec="300">5 分钟</button>
+      </div>
+
+      <h3>控制</h3>
+      <div class="rest-actions">
+        <button type="button" class="primary" id="btnRestart">↻ 重新开始休息</button>
+        <button type="button" id="btnEnd">结束休息 · 回到学习</button>
+      </div>
+
+      <h3>提醒音色</h3>
+      <div class="rest-voice">
+        <select id="restVoice" aria-label="提醒音色"></select>
+        <button type="button" id="btnVoiceTest">试听</button>
+      </div>
+
+      <div class="rest-tip">
+        <b>验收要点：</b>猫头鹰会自己下桌散步，随机去床上睡觉、餐桌吃面包、书柜翻书，睡醒继续走。休息态可自由拖动；学习态拖它会警告并飞回书桌。
+      </div>
+      <div class="rest-links">
+        <a href="rest-test.html?walk=1">⚡ 加速演示（走动 / 犯困更快）</a>
+        <a href="index.html">返回正式版 index.html</a>
+      </div>
+    </aside>
+
+  </div>
+
+<script type="module">
+  import { PixelScene } from "./js/pixel-scene.js";
+  import {
+    initVoice, speakText, previewVoice,
+    listVoices, labelOf, getSelectedVoice, setSelectedVoice, onVoicesChanged
+  } from "./js/voice.js";
+
+  initVoice();
+
+  // 小屋整段照搬正式版，独立运行；带 walk=1 时 pixel-scene 会自动加速走动与犯困
+  const scene = new PixelScene(document.getElementById("pixelView")).init();
+  if (scene.mode !== "REST") scene.setMode("REST");
+
+  // ---------- 休息倒计时 ----------
+  const clockEl = document.getElementById("restClock");
+  const stateEl = document.getElementById("restState");
+  const presetBtns = [...document.querySelectorAll("#restPresets button")];
+
+  let total = 300;
+  let left = total;
+  let running = true;
+  let timer = null;
+
+  const fmt = (s) => {
+    const m = Math.floor(Math.max(0, s) / 60);
+    const ss = String(Math.max(0, s) % 60).padStart(2, "0");
+    return `${String(m).padStart(2, "0")}:${ss}`;
+  };
+
+  function render() {
+    clockEl.textContent = fmt(left);
+    clockEl.style.color = left <= 10 ? "#c0392b" : "#b55a24";
+    stateEl.textContent = running
+      ? (scene.mode === "REST" ? "休息中 · 猫头鹰自由走动" : "学习态 · 倒计时仍在跑")
+      : "已暂停";
+    document.getElementById("clockText").textContent = fmt(left);
+    document.getElementById("clockSub").textContent = "休息";
+  }
+
+  function tick() {
+    clearInterval(timer);
+    timer = setInterval(() => {
+      if (!running) return;
+      left--;
+      if (left <= 0) {
+        clearInterval(timer);
+        left = 0;
+        if (scene.mode === "REST") scene.setMode("STUDY");
+        speakText("休息结束，我们继续学习");
+        stateEl.textContent = "休息结束 · 已回到学习态";
+      }
+      render();
+    }, 1000);
+  }
+
+  presetBtns.forEach((btn) => {
+    btn.onclick = () => {
+      presetBtns.forEach((b) => b.classList.remove("on"));
+      btn.classList.add("on");
+      total = left = Number(btn.dataset.sec);
+      if (scene.mode !== "REST") scene.setMode("REST");
+      running = true;
+      tick();
+      render();
+    };
+  });
+
+  document.getElementById("btnRestart").onclick = () => {
+    left = total;
+    if (scene.mode !== "REST") scene.setMode("REST");
+    running = true;
+    tick();
+    render();
+  };
+
+  document.getElementById("btnEnd").onclick = () => {
+    running = false;
+    clearInterval(timer);
+    if (scene.mode === "REST") scene.setMode("STUDY");
+    render();
+    stateEl.textContent = "已手动结束休息 · 学习态";
+  };
+
+  // ---------- 音色：三套离线配音都能在这里试听 ----------
+  const sel = document.getElementById("restVoice");
+  function fillVoices() {
+    const cur = getSelectedVoice();
+    const vs = listVoices();
+    sel.innerHTML = "";
+    vs.forEach((v) => sel.add(new Option(labelOf(v), v.voiceURI)));
+    sel.value = vs.some((v) => v.voiceURI === cur) ? cur : "";
+  }
+  sel.onchange = () => { setSelectedVoice(sel.value); previewVoice(sel.value); };
+  document.getElementById("btnVoiceTest").onclick = () => previewVoice(sel.value);
+  onVoicesChanged(fillVoices);
+  fillVoices();
+
+  render();
+  tick();
+</script>
+</body>
+</html>
