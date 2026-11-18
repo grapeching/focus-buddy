@@ -25,6 +25,7 @@ const KEY = {
   plans: "fb.plans.v1",
   days: "fb.days.v1",
   session: "fb.session.v1",   // 未结束的一轮会话存档：轮次/阶段/剩余时间/当前任务
+  current: "fb.current.v1",   // 正在做的那条计划（单独存，避免重开后自动跳到第一条）
 };
 
 const DEFAULT_SETTINGS = {
@@ -151,6 +152,11 @@ function loadAll() {
 
   try { plans = JSON.parse(localStorage.getItem(KEY.plans) || "[]") || []; } catch (_) { plans = []; }
   if (!Array.isArray(plans)) plans = [];
+  // 当前任务也要恢复：只存 id，读取时校验它是否还存在且未完成
+  try {
+    const cid = localStorage.getItem(KEY.current);
+    if (cid && plans.some((p) => p.id === cid && !p.done)) currentId = cid;
+  } catch (_) {}
 
   try { rt.cal = JSON.parse(localStorage.getItem(KEY.cal) || "null"); } catch (_) { rt.cal = null; }
   if (rt.cal && typeof rt.cal.pitchThr !== "number") rt.cal = null;
@@ -160,7 +166,16 @@ function loadAll() {
   }
 }
 const saveSettings = () => localStorage.setItem(KEY.settings, JSON.stringify(settings));
-const savePlans = () => localStorage.setItem(KEY.plans, JSON.stringify(plans));
+const saveCurrent = () => {
+  try {
+    if (currentId) localStorage.setItem(KEY.current, currentId);
+    else localStorage.removeItem(KEY.current);
+  } catch (_) {}
+};
+const savePlans = () => {
+  localStorage.setItem(KEY.plans, JSON.stringify(plans));
+  saveCurrent();
+};
 
 function todayKey() {
   const d = new Date();
@@ -328,6 +343,7 @@ function renderPlans() {
     ul.innerHTML = '<li class="plan-empty">今天想做什么？在上面写一条吧 ✏️</li>';
     currentId = null;
     syncBook();
+    saveCurrent();
     return;
   }
 
@@ -348,6 +364,7 @@ function renderPlans() {
     .join("");
 
   syncBook();
+  saveCurrent();   // fallback 可能改了 currentId，顺手落盘
 }
 
 function syncBook() {
@@ -1256,9 +1273,18 @@ function startSession(mode = "camera") {
 
   if (mode === "camera") {
     startCamera().then(async (ok) => {
-      if (!ok) { rt.starting = false; return; }
+      if (!ok) {
+        rt.starting = false;
+        // 恢复失败时把卡片放回来，进度还在，用户可以再试一次
+        if (pendingRestore) $("#restoreModal").hidden = false;
+        return;
+      }
       const ready = await initModels();
-      if (!ready) { rt.starting = false; return; }
+      if (!ready) {
+        rt.starting = false;
+        if (pendingRestore) $("#restoreModal").hidden = false;
+        return;
+      }
       reloadCal();
       if (!rt.cal) await runCalibration();
       rt.starting = false;
@@ -1301,6 +1327,8 @@ function beginRunning(mode) {
     rt.phaseEndAt = Date.now() + rt.remainMs;
     rt.paused = !!s.paused;
     if (s.currentId && plans.some((p) => p.id === s.currentId && !p.done)) currentId = s.currentId;
+    else if (s.currentId) currentId = null;   // 上次那条已完成/被删，交给 renderPlans 落到下一条
+    renderPlans();                            // 关键：任务列表与「这轮做：」立刻跟上存档
   }
   detector.reset();
   // 手机判定缓冲也清空，避免上一轮的残留影响新一轮
@@ -1810,21 +1838,45 @@ function boot() {
   if (snap && !rt.running) {
     pendingRestore = snap;
     const task = plans.find((p) => p.id === snap.currentId);
+    // 卡片一出现就把「当前任务」对齐到存档，避免底部栏还显示别的任务
+    if (task && !task.done) { currentId = task.id; renderPlans(); }
     $("#rstCycle").textContent = `第 ${snap.cycle || 1} 轮`;
     $("#rstPhase").textContent = snap.phase === "break" ? "休息中" : "专注中";
     $("#rstRemain").textContent = clockText(snap.remainMs);
     $("#rstTask").textContent = task ? `上次在做：${task.text}` : "";
+    // 说清楚「关掉期间不计时」，避免以为时间没接上
+    const ago = Math.max(0, Date.now() - (snap.savedAt || 0));
+    const agoText = ago < 60000 ? "刚刚关掉"
+      : ago < 3600000 ? `${Math.round(ago / 60000)} 分钟前关掉`
+      : `${Math.floor(ago / 3600000)} 小时 ${Math.round((ago % 3600000) / 60000)} 分钟前关掉`;
+    $("#rstAgo").textContent = `${agoText} · 关掉期间不计时，继续时从剩余时间接着走`;
     $("#restoreModal").hidden = false;
     // 恢复卡片出现时用当前音色播一句（固定台词，三套都已预录）
     say("欢迎回来，上次没学完的进度还留着。", 3000);
     $("#btnRestoreGo").onclick = () => {
       $("#restoreModal").hidden = true;
-      startSession(pendingRestore?.mode || "camera");   // 摄像头重开，beginRunning 内套用存档
+      // 开摄像头 / 模型 / 校准要十几秒，先把界面切到「恢复态」，
+      // 否则这段时间会显示完整时长（如 25:00），看着像没接上。
+      const s = pendingRestore;
+      if (s) {
+        $("#cyclePill").textContent = `第 ${s.cycle || 1} 轮`;
+        $("#countdown").textContent = clockText(s.remainMs);
+        $("#clockText").textContent = clockText(s.remainMs);
+        $("#phaseLabel").textContent = s.phase === "break" ? "休息中" : "专注中";
+        $("#stageTip").textContent = "正在接上上次的进度…";
+      }
+      startSession(s?.mode || "camera");   // 摄像头重开，beginRunning 内套用存档
     };
     $("#btnRestoreDiscard").onclick = () => {
       $("#restoreModal").hidden = true;
       pendingRestore = null;
       clearSession();
+      // 从头开始：当前任务回到第一条未完成，倒计时回到完整时长
+      currentId = null;
+      renderPlans();
+      $("#cyclePill").textContent = "第 1 轮";
+      $("#stageTip").textContent = "别摸手机，我在看着你哦";
+      renderPhaseUi();
       say("好，那我们从第一轮重新开始。", 2600);
     };
   }
