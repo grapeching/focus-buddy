@@ -1410,6 +1410,11 @@ input[type="checkbox"]:checked::after { transform: translateX(17px); }
   opacity: 1; background: rgba(255, 214, 150, .16);
   border-color: #ffd796;
 }
+/* 书桌「拖回去学习」热区：青绿色，和家具的暖黄区分开 */
+.px-zone-desk { border-color: rgba(120, 214, 190, .85); background: rgba(120, 214, 190, .05); }
+.px-frame.dragging .px-zone-desk.hot {
+  opacity: 1; background: rgba(120, 214, 190, .2); border-color: #6fd7be;
+}
 
 /* ==================================================================
    主界面极简模式：画面里只显示「切换夜晚」这一个按钮

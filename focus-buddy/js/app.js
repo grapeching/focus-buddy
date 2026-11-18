@@ -1281,7 +1281,7 @@ function nextPhase() {
     sfxChime("break");
     // 专注时段完成 → 先表扬，模块内部停顿后自行进入 REST
     onFocusComplete();
-    $("#stageTip").textContent = "休息中 · 把我拖到床 / 书柜 / 餐桌，换个动作歇会儿";
+    $("#stageTip").textContent = "休息中 · 拖我到床 / 书柜 / 餐桌歇会儿；拖回书桌就继续学习";
   } else {
     rt.phase = "study";
     rt.cycle += 1;
@@ -1470,23 +1470,17 @@ function applySettingsToUi() {
   syncAmbUi();
 }
 
-/** 把语音填进所有下拉（设置 / 监督页）：中文排前面，选中的那个保持选中 */
+/** 把三套离线音色填进所有下拉（设置 / 监督页），选中的那个保持选中 */
 function fillVoiceOptions() {
   const cur = getSelectedVoice();
   const vs = listVoices();
-  const picked = vs.some((v) => v.voiceURI === cur) ? cur : "";
+  const picked = vs.some((v) => v.voiceURI === cur) ? cur : vs[0]?.voiceURI;
   ["#selVoice", "#selVoiceMonitor"].forEach((id) => {
     const sel = $(id);
     if (!sel) return;
     sel.innerHTML = "";
-    sel.add(new Option("跟随系统默认", ""));
     vs.forEach((v) => sel.add(new Option(labelOf(v), v.voiceURI)));
     sel.value = picked;
-    if (!vs.length) {
-      // 语音列表异步加载，第一次可能还是空的
-      sel.add(new Option("正在读取系统语音…", ""));
-      sel.value = "";
-    }
   });
 }
 
@@ -1511,6 +1505,11 @@ function boot() {
 
   // 像素小屋就是主界面
   pixelScene = new PixelScene($("#pixelView")).init();
+  // 休息态把猫头鹰拖回书桌：若正处在休息阶段，就提前结束休息、进入下一轮学习，
+  // 让计时循环和小屋状态保持一致（场景层已在 pixel-scene 里切到 STUDY）。
+  pixelScene.onDeskDrop = () => {
+    if (rt.running && !rt.paused && rt.phase === "break") nextPhase();
+  };
   // 三个接口留桩：以后换检测源，直接调 window.onPhoneDetected() 等即可
   Object.assign(window, { onPhoneDetected, onFocusComplete, onRestStart });
 

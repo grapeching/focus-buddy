@@ -233,14 +233,14 @@
                 <div class="px-footrow">
                   <div class="foot-left">
                     <b id="footTask">休息中</b>
-                    <span id="footSub">拖它去床 / 书柜 / 餐桌试试</span>
+                    <span id="footSub">拖去床 / 书柜 / 餐桌玩，拖回书桌继续学</span>
                   </div>
                   <div class="foot-right">
                     <span class="foot-chip"><i class="ic">🔔</i><b id="footKnock">0</b> 次提醒</span>
                     <span class="foot-chip"><i class="ic">⏱</i><b id="footFocus">0</b> 分专注</span>
                   </div>
                 </div>
-                <div class="px-hint">随时可以拖我 · 放到床 / 书柜 / 餐桌会换动作 · 点我一下会说话</div>
+                <div class="px-hint">随时可以拖我 · 放到床 / 书柜 / 餐桌会换动作 · 拖回书桌就继续学习 · 点我一下会说话</div>
               </div>
             </div>
 
@@ -282,7 +282,7 @@
       </div>
 
       <div class="rest-tip">
-        <b>验收要点：</b>猫头鹰会自己下桌散步，随机去床上睡觉、餐桌吃面包、书柜翻书，睡醒继续走。休息态可自由拖动；学习态拖它会警告并飞回书桌。
+        <b>验收要点：</b>猫头鹰会自己下桌散步，随机去床上睡觉、餐桌吃面包、书柜翻书，睡醒继续走。休息态可自由拖动；拖回书桌会切回学习态并停掉倒计时；学习态拖它会警告并飞回书桌。
       </div>
       <div class="rest-links">
         <a href="rest-test.html?walk=1">⚡ 加速演示（走动 / 犯困更快）</a>
@@ -373,6 +373,14 @@
     if (scene.mode === "REST") scene.setMode("STUDY");
     render();
     stateEl.textContent = "已手动结束休息 · 学习态";
+  };
+
+  // 休息态把猫头鹰拖回书桌 = 结束休息、回到学习（与「结束休息」按钮一致）
+  scene.onDeskDrop = () => {
+    running = false;
+    clearInterval(timer);
+    render();
+    stateEl.textContent = "已拖回书桌 · 回到学习态";
   };
 
   // ---------- 音色：三套离线配音都能在这里试听 ----------

@@ -1,16 +1,16 @@
 /**
  * voice.js — 提醒语音「用谁来说」
  *
- * 三套离线配音（固定台词预生成 MP3，播放不联网）：
+ * 三套离线配音（固定台词预生成 MP3，播放不联网）——也是下拉里仅有的三个选项：
  *   1) 云扬（专业沉稳男声）—— assets/voice/v_*.mp3    + voice-map.js
  *   2) 云夏（可爱童声）    —— assets/voice/xia_*.mp3  + voice-map-xia.js
  *   3) 云希（阳光男声）    —— assets/voice/xi_*.mp3   + voice-map-xi.js
- * 另有浏览器 speechSynthesis——系统已安装语音（Edge 还有在线自然人声），
- * 用于没预录的句子（带变量的台词）和手动挑选的其他音色。
+ * 不再提供「跟随系统默认」或系统音色选项；系统 speechSynthesis 仅在内部用于
+ * 没预录的句子（带变量的台词）兜底，用户看不到也选不到。
  *
- * 统一入口 speakText()：选了离线音色优先播对应 MP3，命不中的回退系统语音
- * （云夏挑女声、云扬/云希挑男声兜底）；选「只看字」则完全静音。
- * 换音色 / 试听都即时生效并记住。
+ * 统一入口 speakText()：命中对应 MP3 就播本地音频，没预录的再回退系统语音
+ * （云夏挑女声、云扬/云希挑男声兜底），保证每句字幕都有声音；
+ * 选「只看字」则完全静音。换音色 / 试听都即时生效并记住。
  *
  * 要加新台词：编辑 assets/voice/生成配音.py 的 LINES，
  * 跑 python assets/voice/生成配音.py --all 重新生成三套。
@@ -48,7 +48,7 @@ let selected = "";
 let useOffline = true;    // 当前选的是不是某套离线配音（云扬 / 云夏 / 云希）
 let inited = false;
 let autoPicked = false;   // 只在「从没选过音色」时自动挑一次
-let chosenBefore = false; // localStorage 里已经有记录（哪怕存的是空串＝跟随系统默认）
+let chosenBefore = false; // localStorage 里已经有记录（旧版的空串/系统音色会在 initVoice 迁移回云扬）
 const listeners = new Set();
 
 function synth() {
@@ -96,8 +96,12 @@ export function initVoice() {
     chosenBefore = v !== null;
     selected = v || "";
   } catch (_) { selected = ""; }
-  // 从没选过就定成云扬离线，不等系统语音列表异步到齐
-  if (!chosenBefore && !selected) setSelectedVoice(OFFLINE_URI);
+  // 只认三套离线音色；历史遗留的「跟随系统默认」(空串) 或某个系统音色
+  // 现在下拉里已经没有了，一律迁移回默认云扬，避免选中项对不上任何选项。
+  if (!OFFLINE_URIS.has(selected)) {
+    selected = OFFLINE_URI;
+    try { localStorage.setItem(KEY, selected); } catch (_) {}
+  }
   useOffline = OFFLINE_URIS.has(selected);
   refresh();
   const s = synth();
@@ -109,8 +113,8 @@ export function initVoice() {
   }
 }
 
-/** 当前可用语音：三套离线配音排最前，其后是系统语音（中文在前），设置面板直接用 */
-export function listVoices() { return [...OFFLINE_VOICES, ...voices.slice()]; }
+/** 可选音色：仅三套离线配音（不暴露系统语音） */
+export function listVoices() { return OFFLINE_VOICES.slice(); }
 
 /** 订阅语音列表变化（语音是异步加载的，面板打开时可能还是空的） */
 export function onVoicesChanged(fn) {
@@ -126,10 +130,10 @@ export function labelOf(v) {
   return `${genderHint(v.name)}${v.name}${v.lang ? " · " + v.lang : ""}`;
 }
 
-/** 传空串 = 跟随系统默认；三个 OFFLINE_URI = 用对应离线配音 */
+/** 只接受三套离线配音的 URI；其它值（含空串）一律回退默认云扬 */
 export function setSelectedVoice(uri) {
-  selected = uri || "";
-  useOffline = OFFLINE_URIS.has(selected);
+  selected = OFFLINE_URIS.has(uri) ? uri : OFFLINE_URI;
+  useOffline = true;
   try {
     localStorage.setItem(KEY, selected);
   } catch (_) { /* 隐私模式下写不了也不影响本次生效 */ }

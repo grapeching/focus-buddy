@@ -5,6 +5,7 @@
  * 状态机：STUDY / ALERT / PRAISE / REST
  * 拖拽规则：只有 REST 休息态能自由移动猫头鹰；学习三态（STUDY / ALERT / PRAISE）
  *           拎起松手会温和警告，并沿弧线飞回书桌继续学习，不落到别处。
+ *           休息态把猫头鹰拖回书桌热区 → 切回 STUDY 继续学习（触发 onDeskDrop 回调）。
  * 对外三个入口：onPhoneDetected() / onFocusComplete() / onRestStart()
  * 测试服：?test=1 / ?rest=1 / ?walk=1 / ?debug=1 时，右上角显示「休息 / 学习」
  *         一键切换按钮（#pxRestBtn），正式界面不显示，主界面仍只有昼夜按钮。
@@ -148,6 +149,9 @@ const OUTING = {
 
 /** 课桌本体（不是热区，角色不能站在桌子里） */
 const DESK_BLOCK = { x0: 0.31, x1: 0.70, y0: 0.55, y1: 0.86 };
+/** 休息态「拖回书桌 = 回去学习」的命中区：桌面及它前面的座位，
+ *  比 DESK_BLOCK 略放宽一点便于松手命中，且与三件家具热区不重叠。 */
+const DESK_RETURN = { x0: 0.30, x1: 0.72, y0: 0.46, y1: 0.72 };
 const WALK_BLOCKS = [DESK_BLOCK, ...Object.values(SPOTS)];
 
 /** 目标点必须避开课桌与床 / 书柜 / 餐桌的交互热区 */
@@ -372,6 +376,14 @@ export class PixelScene {
         this._enterSpot(el.dataset.spot);
       });
     });
+    // 书桌「拖回去学习」提示框：没有家具 PNG，单独按 DESK_RETURN 定位
+    const deskZone = this.root.querySelector('.px-zone[data-zone="desk"]');
+    if (deskZone) {
+      deskZone.style.left = DESK_RETURN.x0 * 100 + "%";
+      deskZone.style.top = DESK_RETURN.y0 * 100 + "%";
+      deskZone.style.width = (DESK_RETURN.x1 - DESK_RETURN.x0) * 100 + "%";
+      deskZone.style.height = (DESK_RETURN.y1 - DESK_RETURN.y0) * 100 + "%";
+    }
 
     this.owl.addEventListener("pointerdown", this._onPointerDown);
     // 换精灵后宽度会变，重新按锚点摆一次，保证「切换精灵不移动角色」且落在整数像素上
@@ -494,7 +506,7 @@ export class PixelScene {
       }, 2800);
     }
     if (mode === "REST") {
-      this.showLine("休息啦 · 我自己溜达一会儿，随时能把我拖走", 2600);
+      this.showLine("休息啦 · 拖我去床 / 餐桌 / 书柜玩，拖回书桌就继续学", 2800);
       this._startRestWalk();   // 从课桌中央下到地板，开始 idle → walk 循环
     }
   }
@@ -949,13 +961,21 @@ export class PixelScene {
     if (hint) this._hintSpot(x, y);
   }
 
-  /** 拖到哪件家具上方，就把那件淡淡点亮，提示松手会触发动作 */
+  /** 拖到哪件家具上方，就把那件淡淡点亮，提示松手会触发动作；
+   *  书桌热区单独点亮（休息态拖回去 = 继续学习）。 */
   _hintSpot(x, y) {
     Object.keys(SPOTS).forEach((k) => {
       const s = SPOTS[k];
       const hot = x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1;
       this.root.querySelector(`.px-zone[data-zone="${k}"]`)?.classList.toggle("hot", hot);
     });
+    const deskHot = this.mode === "REST" && this._inDesk(x, y);
+    this.root.querySelector('.px-zone[data-zone="desk"]')?.classList.toggle("hot", deskHot);
+  }
+
+  /** 松手点是否落在书桌「回去学习」命中区 */
+  _inDesk(x, y) {
+    return x >= DESK_RETURN.x0 && x <= DESK_RETURN.x1 && y >= DESK_RETURN.y0 && y <= DESK_RETURN.y1;
   }
 
   _onPointerUp(e) {
@@ -980,10 +1000,19 @@ export class PixelScene {
       return;
     }
 
-    // 休息态：落到前排地板；落在家具热区就切换对应动作
+    // 休息态：落到前排地板；落在家具热区就切换对应动作；
+    // 落在书桌热区就「回去学习」（切学习态并通知外部暂停休息）。
     const r = this.frame.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
+
+    if (this._inDesk(x, y)) {
+      this.setMode("STUDY");
+      this.showLine("好，回到书桌前，我们继续学。", 2800);
+      try { this.onDeskDrop?.(); } catch (_) {}
+      return;
+    }
+
     const hit = Object.keys(SPOTS).find((k) => {
       const s = SPOTS[k];
       return x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1;
