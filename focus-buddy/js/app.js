@@ -112,6 +112,7 @@ const rt = {
   lastKnockAt: 0,
   pending: null,
   pendingSince: 0,
+  noFaceSince: 0,       // 连续找不到脸的起始时刻（留给云端复核确认人在不在）
   nagLevel: 0,
 
   demo: null,
@@ -541,10 +542,12 @@ async function initYolo() {
    只在本地出现手机证据（灰区）时抽一帧，避免把积分烧在无意义的帧上。
    ------------------------------------------------------------ */
 const VISION = {
-  intervalMs: 6000,     // 两次复核的最小间隔
+  intervalMs: 6000,     // 两次复核的最小间隔（手机灰区）
   holdMs: 7000,         // 一次结论的有效期（这段时间不再重复问）
   minConf: 0.6,         // 低于此置信度不采信
   triggerScore: 0.30,   // 本地手机分达到这个值才算灰区
+  noFaceIntervalMs: 2500, // 找不到脸时的复核间隔（低头场景，比手机灰区更积极）
+  noFaceGraceMs: 2600,    // 找不到脸先等这么久（等云端结论），再判离席，避免低头瞬间误报
   box: CROP,            // 抽帧区域与裁剪检测共用一块
 };
 
@@ -777,18 +780,26 @@ function refinePhone(o, now) {
   return st;
 }
 
-/* 灰区才上云：本地已经确定手持就别再花钱，看不到任何手机迹象也不必问 */
+/* 灰区才上云：本地已确定手持、或人/手机都清楚，就别再花钱。
+   两种灰区：① 手机疑似；② 找不到脸（低头常拍不到脸，交云端确认人还在不在）*/
 function maybeAiReview(now) {
   const vs = visionState;
-  if (!settings.aiReview || !settings.phone) return;
+  if (!settings.aiReview) return;
   if (rt.mode !== "camera" || !rt.running || rt.paused || rt.calibrating) return;
   if (rt.phase === "break" && !settings.superviseBreak) return;
-  if (vs.busy || now - vs.lastTry < VISION.intervalMs) return;
+  if (vs.busy) return;
   if (vs.at && now - vs.at < VISION.holdMs) return;   // 上一条结论还有效
-  if (rt.phone.handheld && rt.phone.src !== "ai") return;  // 本地已经确信，不用复核
 
-  const gray = (rt.obs.phone || 0) >= VISION.triggerScore || rt.phone.mode === "on_desk";
-  if (!gray) return;
+  const noFace = rt.obs.faceCount === 0;
+  const phoneGray = settings.phone
+    && ((rt.obs.phone || 0) >= VISION.triggerScore || rt.phone.mode === "on_desk");
+  if (!noFace && !phoneGray) return;
+  // 本地已经确信手持（且不是云端判的）就不用为手机再问；但没人脸时仍需确认人在不在
+  if (!noFace && rt.phone.handheld && rt.phone.src !== "ai") return;
+
+  // 没人脸时用更短的间隔，让「低头到底在不在」尽快有结论
+  const interval = noFace ? VISION.noFaceIntervalMs : VISION.intervalMs;
+  if (now - vs.lastTry < interval) return;
 
   const url = captureFrame($("#video"), VISION.box);
   if (!url) return;
@@ -818,8 +829,28 @@ function judge(o, now, dt) {
   // 除非显式打开「姿态也算走神」，否则低头/转头不产生任何提醒。
   rt.posture = { down: lookingDown, side: lookingSide, up: lookingUp, tired: sleepy, yawDev, pitchDev };
 
+  // 找不到脸不立刻判离席：低头时脸朝下常拍不到，先让云端看一帧确认人还在不在。
+  // 维护「连续没脸」计时；一旦看到脸就清零。
+  if (!hasFace) { if (!rt.noFaceSince) rt.noFaceSince = now; }
+  else rt.noFaceSince = 0;
+
+  // 云端近期结论：focus=人还在座位（含低头只拍到头顶/身体），away=真走了。
+  // 注意：vs.confidence 是「手机置信度」，判 focus 时必然很低，不能拿来当在座判据。
+  const vs = visionState;
+  const aiFresh = settings.aiReview && vs.at && now - vs.at < VISION.holdMs;
+  const aiSaysHere = aiFresh && vs.verdict === "focus";
+  const aiSaysAway = aiFresh && vs.verdict === "away";
+
   let reason = null;
-  if (!hasFace) reason = "gone";
+  if (!hasFace) {
+    if (aiSaysHere) {
+      reason = null;                                   // 云端确认人在，压制离席误报
+    } else if (aiSaysAway) {
+      reason = "gone";                                 // 云端确认人走，立即判离席
+    } else if (now - rt.noFaceSince >= (settings.aiReview ? VISION.noFaceGraceMs : 0)) {
+      reason = "gone";                                 // 没开复核 / 结论未到：缓冲后按本地判
+    }
+  }
   else if (phoneSeen) reason = "phone";
   else if (settings.posture) {
     if (lookingDown) reason = "down";
@@ -1025,7 +1056,12 @@ function updateCamState() {
   if (rt.distracted) { el.textContent = "⚠ " + (REASON_NAME[rt.reason] || "走神"); el.style.color = "var(--danger)"; }
   else if (rt.paused) { el.textContent = "已暂停"; el.style.color = "var(--muted)"; }
   else if (settings.phone && rt.phone.mode === "on_desk") { el.textContent = "手机在桌上"; el.style.color = "var(--muted)"; }
-  else if (!rt.obs.faceCount && rt.mode === "camera") { el.textContent = "没看到人"; el.style.color = "var(--muted)"; }
+  else if (!rt.obs.faceCount && rt.mode === "camera") {
+    const vs = visionState;
+    const aiHere = settings.aiReview && vs.at && performance.now() - vs.at < VISION.holdMs && vs.verdict === "focus";
+    el.textContent = aiHere ? "低头中 · 人还在" : "没看到人";
+    el.style.color = "var(--muted)";
+  }
   // 姿态偏离不再触发提醒，但把状态说出来，用户就知道检测在跑、只是不打断（手机正在判定时不抢文案）
   else if (!settings.posture && rt.phone.mode === "none" && (rt.posture.down || rt.posture.side || rt.posture.up)) {
     el.textContent = rt.posture.down ? "低头中（不提醒）" : "视线偏了（不提醒）"; el.style.color = "var(--muted)";

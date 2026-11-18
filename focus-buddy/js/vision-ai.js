@@ -24,13 +24,17 @@ const CFG = {
 const SYSTEM_PROMPT = "你是学习监督助手的视觉判断模块，只输出 JSON，不要任何解释。";
 
 const USER_PROMPT = [
-  "输入是一帧学生书桌前的摄像头画面。判断该学生此刻是否在认真学习，重点识别手机的存在与使用状态。",
+  "输入是一帧学生书桌前的摄像头画面，机位在正前方偏上。判断学生此刻是否在座位上认真学习，重点识别手机的存在与使用状态。",
   "一、手机位置：handheld（被手握着、屏幕朝向学生、靠近面部或胸口）/ on_desk（平放在桌面或桌角，无手触碰）/ none（画面中看不到手机）。",
   "二、使用迹象：手指在屏幕上滑动点击、屏幕亮起且朝向学生、头部低垂且手中持物。",
-  "三、学习状态：是否有书、笔、笔记本、键盘，且手在书写或操作；视线是否朝向桌面学习材料。",
-  '严格只输出 JSON：{"phone_present":true,"phone_location":"handheld|on_desk|none","phone_in_use":true,"phone_confidence":0.0,"study_materials_visible":true,"head_down":false,"verdict":"focus|phone_distraction|away|unclear","reason":"一句中文说明"}',
+  "三、人在座位的证据（关键）：低头时摄像头常常只拍到头顶、后脑勺、头发、额头一角、肩膀、手臂或身体轮廓，看不到完整人脸是低头的正常现象，不代表人离开了。只要画面出现上述任一人体部分，或能看到人坐着、手放在桌面或书本附近，就判定人仍在座位，head_down 设为 true。",
+  "四、学习状态：有书、笔、笔记本、键盘，且手在书写或操作，或身体前倾朝向桌面，都算学习，verdict 倾向 focus。",
+  "严格只输出 JSON，字段名与顺序不得改动：",
+  '{"phone_present":true,"phone_location":"handheld|on_desk|none","phone_in_use":true,"phone_confidence":0.0,"study_materials_visible":true,"head_down":false,"verdict":"focus|phone_distraction|away|unclear","reason":"一句中文说明"}',
   "判定规则：handheld 且 phone_in_use=true → phone_distraction；on_desk 且无人触碰 → 不算分心，verdict 仍为 focus；",
-  "看不到人脸且无明显学习动作 → away；画面过暗过糊信息不足 → unclear，不要猜；置信度 < 0.6 一律 unclear（宁可漏判，不可误判）。",
+  "低头（head_down=true）但手中无手机、身体在座位、手在桌面学习材料附近 → focus，绝不判 away；",
+  "只有画面里完全看不到任何人体部分（只剩空桌、空椅、背景），或有明确起身离开的动作 → away；",
+  "画面过暗过糊信息不足 → unclear，不要猜；置信度 < 0.6 一律 unclear（宁可漏判，不可误判）。",
 ].join("\n");
 
 export const visionState = {
