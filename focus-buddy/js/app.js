@@ -174,8 +174,25 @@ const saveDays = (d) => localStorage.setItem(KEY.days, JSON.stringify(d));
  * 不存 focusMs、knocks 这些统计——它们在关闭时由 commitSession 结算进 days 了，
  * 恢复时若再写回 rt 会重复累计。恢复 = 重新开摄像头，但套用存下来的轮次与剩余时间。
  * 超过 24 小时的旧存档视为过期，不再提示。
+ *
+ * 为什么同时写 cookie：exe 每次启动挑随机端口，localStorage 按「域名+端口」隔离，
+ * 换端口就读不到上次存档。cookie 只按域名隔离、不区分端口，同一台机器上 127.0.0.1
+ * 的所有端口都共享，所以关掉 exe 再开仍能读到。localStorage 仅作同端口兜底。
  */
 const SESSION_MAX_AGE = 24 * 60 * 60 * 1000;
+const SESSION_COOKIE = "fb_session_v1";
+function writeSessionCookie(snap) {
+  try {
+    // path=/ 保证同域所有路径可读；max-age 与过期时间一致；SameSite=Lax 本地够用
+    document.cookie = `${SESSION_COOKIE}=${encodeURIComponent(JSON.stringify(snap))};path=/;max-age=86400;SameSite=Lax`;
+  } catch (_) {}
+}
+function readSessionCookie() {
+  try {
+    const hit = document.cookie.split("; ").find((c) => c.startsWith(SESSION_COOKIE + "="));
+    return hit ? decodeURIComponent(hit.slice(SESSION_COOKIE.length + 1)) : null;
+  } catch (_) { return null; }
+}
 function saveSession() {
   try {
     if (!rt.running) { clearSession(); return; }
@@ -191,12 +208,16 @@ function saveSession() {
       paused: rt.paused,
       currentId: currentId,          // 正在做的那条计划
     };
-    localStorage.setItem(KEY.session, JSON.stringify(snap));
+    const json = JSON.stringify(snap);
+    localStorage.setItem(KEY.session, json);   // 同端口兜底
+    writeSessionCookie(snap);                   // 跨端口（exe 随机端口）关键
   } catch (_) { /* 隐私模式写不了就算了 */ }
 }
 function loadSession() {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY.session) || "null");
+    // 优先 cookie（跨端口），再回退 localStorage（同端口旧数据）
+    const raw = readSessionCookie() || localStorage.getItem(KEY.session);
+    const s = JSON.parse(raw || "null");
     if (!s || s.v !== 1) return null;
     if (!["study", "break"].includes(s.phase)) return null;
     if (!Number.isFinite(s.remainMs) || s.remainMs <= 0) return null;
@@ -206,6 +227,7 @@ function loadSession() {
 }
 function clearSession() {
   try { localStorage.removeItem(KEY.session); } catch (_) {}
+  try { document.cookie = `${SESSION_COOKIE}=;path=/;max-age=0;SameSite=Lax`; } catch (_) {}
 }
 
 function commitSession() {
