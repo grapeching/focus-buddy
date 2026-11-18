@@ -402,7 +402,28 @@
 
     <div class="modal-foot">
       <button class="btn ghost" id="btnResetCal">重置校准</button>
+      <button class="btn ghost" id="btnClearSave">清除存档</button>
       <button class="btn primary" id="btnSaveSettings">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 会话存档恢复 ================= -->
+<div class="modal" id="restoreModal" hidden>
+  <div class="modal-box restore-box">
+    <div class="restore-emoji">📌</div>
+    <h3>找到上次没学完的进度</h3>
+    <p class="restore-lead">上次离开时这一轮还没结束，要接着来吗？</p>
+    <div class="restore-grid">
+      <div class="restore-cell"><span>轮次</span><b id="rstCycle">第 1 轮</b></div>
+      <div class="restore-cell"><span>阶段</span><b id="rstPhase">专注中</b></div>
+      <div class="restore-cell"><span>剩余</span><b id="rstRemain">25:00</b></div>
+    </div>
+    <p class="restore-task" id="rstTask"></p>
+    <p class="hint tight">点「接着学」会重新打开摄像头，并从上面的轮次和剩余时间继续；计划和时间设置都还在。</p>
+    <div class="modal-foot">
+      <button class="btn ghost" id="btnRestoreDiscard">从头开始</button>
+      <button class="btn primary" id="btnRestoreGo">接着学</button>
     </div>
   </div>
 </div>

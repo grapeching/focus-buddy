@@ -71,4 +71,9 @@ export const VOICE_MAP = {
   "放点背景音，写着更静。": "./assets/voice/xia_10277beb11.mp3",
   "先歇会儿，回来继续。": "./assets/voice/xia_7b13f72715.mp3",
   "手机放下，我们先把这一章看完。": "./assets/voice/xia_cab4660ea3.mp3",
+  "欢迎回来，上次没学完的进度还留着。": "./assets/voice/xia_1e1589de89.mp3",
+  "欢迎回来，我们接着学。": "./assets/voice/xia_da8c5a68f1.mp3",
+  "欢迎回来，接着休息，我等你。": "./assets/voice/xia_a58664f3ab.mp3",
+  "好，那我们从第一轮重新开始。": "./assets/voice/xia_39510831aa.mp3",
+  "存档清掉了，下次从头开始。": "./assets/voice/xia_0c450d777e.mp3",
 };

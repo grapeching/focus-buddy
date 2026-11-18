@@ -24,6 +24,7 @@ const KEY = {
   cal: "fb.cal.v1",
   plans: "fb.plans.v1",
   days: "fb.days.v1",
+  session: "fb.session.v1",   // 未结束的一轮会话存档：轮次/阶段/剩余时间/当前任务
 };
 
 const DEFAULT_SETTINGS = {
@@ -137,6 +138,8 @@ let currentId = null;
 let pixelScene = null;
 let audioCtx = null;
 let timerId = 0;
+let lastSessionSave = 0;   // 会话存档节流：倒计时每 2 秒落盘一次
+let pendingRestore = null; // 启动时读到的存档，等用户点「继续」再套用
 
 /* ============================================================
    2. 存储
@@ -165,6 +168,45 @@ function todayKey() {
 }
 const loadDays = () => { try { return JSON.parse(localStorage.getItem(KEY.days) || "{}"); } catch (_) { return {}; } };
 const saveDays = (d) => localStorage.setItem(KEY.days, JSON.stringify(d));
+
+/* ---- 会话存档 ------------------------------------------------------------
+ * 只存「这一轮走到哪了」：轮次 / 阶段 / 剩余时间 / 当前任务 / 暂停态 / 模式。
+ * 不存 focusMs、knocks 这些统计——它们在关闭时由 commitSession 结算进 days 了，
+ * 恢复时若再写回 rt 会重复累计。恢复 = 重新开摄像头，但套用存下来的轮次与剩余时间。
+ * 超过 24 小时的旧存档视为过期，不再提示。
+ */
+const SESSION_MAX_AGE = 24 * 60 * 60 * 1000;
+function saveSession() {
+  try {
+    if (!rt.running) { clearSession(); return; }
+    const remain = rt.paused ? rt.remainMs : Math.max(0, rt.phaseEndAt - Date.now());
+    const snap = {
+      v: 1,
+      savedAt: Date.now(),
+      mode: rt.mode,                 // 'camera' | 'demo'
+      phase: rt.phase,               // 'study' | 'break'
+      phaseLen: rt.phaseLen,
+      remainMs: remain,
+      cycle: rt.cycle,
+      paused: rt.paused,
+      currentId: currentId,          // 正在做的那条计划
+    };
+    localStorage.setItem(KEY.session, JSON.stringify(snap));
+  } catch (_) { /* 隐私模式写不了就算了 */ }
+}
+function loadSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY.session) || "null");
+    if (!s || s.v !== 1) return null;
+    if (!["study", "break"].includes(s.phase)) return null;
+    if (!Number.isFinite(s.remainMs) || s.remainMs <= 0) return null;
+    if (Date.now() - (s.savedAt || 0) > SESSION_MAX_AGE) { clearSession(); return null; }
+    return s;
+  } catch (_) { return null; }
+}
+function clearSession() {
+  try { localStorage.removeItem(KEY.session); } catch (_) {}
+}
 
 function commitSession() {
   if (rt.focusMs + rt.loseMs < 3000 && rt.knocks === 0) {
@@ -1223,6 +1265,21 @@ function beginRunning(mode) {
   rt.distracted = false;
   rt.pending = null;
   rt.lastTs = 0;
+  // ---- 会话恢复：套用存档里的轮次 / 阶段 / 剩余时间 / 当前任务 ----
+  // 摄像头与模型仍按正常流程重开，只是把计时状态接回上次离开的地方。
+  const restoring = !!pendingRestore;
+  if (restoring) {
+    const s = pendingRestore;
+    pendingRestore = null;
+    rt.phase = s.phase;
+    if (s.phaseLen > 0) rt.phaseLen = s.phaseLen;
+    if (s.cycle > 0) rt.cycle = s.cycle;
+    rt.remainMs = s.remainMs;
+    rt.phaseStartAt = Date.now() - (rt.phaseLen - rt.remainMs);
+    rt.phaseEndAt = Date.now() + rt.remainMs;
+    rt.paused = !!s.paused;
+    if (s.currentId && plans.some((p) => p.id === s.currentId && !p.done)) currentId = s.currentId;
+  }
   detector.reset();
   // 手机判定缓冲也清空，避免上一轮的残留影响新一轮
   rt.phone.buf.length = 0;
@@ -1239,12 +1296,16 @@ function beginRunning(mode) {
   yolo.at = 0; yolo.score = 0; yolo.box = null; yolo.stage = ""; yolo.last = 0;
   if (settings.yolo && settings.phone) initYolo();
 
-  const hello = pick("start");
+  const hello = restoring
+    ? (rt.phase === "break" ? "欢迎回来，接着休息，我等你。" : "欢迎回来，我们接着学。")
+    : pick("start");
   say(hello, 2800);
-  pixelScene?.setMode("STUDY");
+  pixelScene?.setMode(rt.phase === "break" ? "REST" : "STUDY");
 
-  $("#cyclePill").textContent = "第 1 轮";
-  $("#stageTip").textContent = "别摸手机，我在看着你哦";
+  $("#cyclePill").textContent = `第 ${rt.cycle} 轮`;
+  $("#stageTip").textContent = restoring && rt.phase === "break"
+    ? "接着休息 · 拖回书桌就继续学习"
+    : "别摸手机，我在看着你哦";
   setEngine("ok", mode === "demo" ? "演示中" : "监督中");
   syncTransport();
   updateMovable();
@@ -1256,6 +1317,7 @@ function beginRunning(mode) {
   renderKnock(0);
   renderPhaseUi();
   renderToday();
+  if (!pendingRestore) saveSession();   // 新会话落盘（恢复套用时由 applyRestore 统一存）
 
   cancelAnimationFrame(rt.raf);
   rt.raf = requestAnimationFrame(loop);
@@ -1266,6 +1328,7 @@ function endSession(finished = false) {
   rt.running = false;
   rt.paused = false;
   rt.phase = "idle";
+  clearSession();              // 正常结束：没有待恢复的一轮了
   cancelAnimationFrame(rt.raf);
   stopCamera();
 
@@ -1296,6 +1359,7 @@ function pauseSession() {
     rt.phaseEndAt = Date.now() + (rt.remainMs || rt.phaseLen);
     rt.phaseStartAt = Date.now() - (rt.phaseLen - rt.remainMs);
   }
+  saveSession();
   syncTransport();
   renderPhaseUi();
 }
@@ -1305,6 +1369,8 @@ function tickTimer() {
   const remain = rt.phaseEndAt - Date.now();
   if (remain <= 0) { nextPhase(); return; }
   rt.remainMs = remain;
+  // 倒计时节流落盘：每 2 秒一次，关掉软件时最多丢 2 秒进度
+  if (Date.now() - lastSessionSave > 2000) { lastSessionSave = Date.now(); saveSession(); }
   renderPhaseUi();
 }
 
@@ -1337,6 +1403,7 @@ function nextPhase() {
   rt.pending = null;
   updateMovable();
   renderPhaseUi();
+  if (!pendingRestore) saveSession();   // 阶段切换后立即落盘
 }
 
 /* ============================================================
@@ -1637,6 +1704,11 @@ function boot() {
     $("#settingsModal").hidden = true;
     say("校准数据清掉了，下次开始会重新校准。");
   };
+  $("#btnClearSave").onclick = () => {
+    clearSession();
+    $("#settingsModal").hidden = true;
+    say("存档清掉了，下次从头开始。");
+  };
   $("#btnCal").onclick = async () => {
     if (!rt.stream) { say("先点「开始学习」打开摄像头，再校准。"); return; }
     await runCalibration();
@@ -1703,7 +1775,37 @@ function boot() {
   switchView(["home", "plan", "rhythm", "monitor"].includes(wantedView) ? wantedView : "home");
 
   window.addEventListener("resize", () => pixelScene?.place());
-  window.addEventListener("beforeunload", () => { if (rt.running) commitSession(); });
+  // 关掉 / 切后台时也把这一轮的进度落盘（统计由 commitSession 结算，这里只存轮次状态）
+  window.addEventListener("beforeunload", () => {
+    if (rt.running) { saveSession(); commitSession(); }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && rt.running) saveSession();
+  });
+
+  // ---- 会话存档恢复 ----
+  const snap = loadSession();
+  if (snap && !rt.running) {
+    pendingRestore = snap;
+    const task = plans.find((p) => p.id === snap.currentId);
+    $("#rstCycle").textContent = `第 ${snap.cycle || 1} 轮`;
+    $("#rstPhase").textContent = snap.phase === "break" ? "休息中" : "专注中";
+    $("#rstRemain").textContent = clockText(snap.remainMs);
+    $("#rstTask").textContent = task ? `上次在做：${task.text}` : "";
+    $("#restoreModal").hidden = false;
+    // 恢复卡片出现时用当前音色播一句（固定台词，三套都已预录）
+    say("欢迎回来，上次没学完的进度还留着。", 3000);
+    $("#btnRestoreGo").onclick = () => {
+      $("#restoreModal").hidden = true;
+      startSession(pendingRestore?.mode || "camera");   // 摄像头重开，beginRunning 内套用存档
+    };
+    $("#btnRestoreDiscard").onclick = () => {
+      $("#restoreModal").hidden = true;
+      pendingRestore = null;
+      clearSession();
+      say("好，那我们从第一轮重新开始。", 2600);
+    };
+  }
 
   // 调试入口：地址加 ?debug 后可手动切阶段，方便测试
   if (location.search.includes("debug")) {
